@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRUD de Tarefas com Firebase e Autenticação</title>
+    <style>
+        /* Estilos gerais */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        #authContainer, #crudContainer {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Estilos dos formulários */
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+
+        input[type="email"], input[type="password"], input[type="text"] {
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Estilos do container de tarefas */
+        #tarefas {
+            margin-top: 20px;
+        }
+
+        .tarefa {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .conteudo-tarefa {
+            flex: 1;
+        }
+
+        .acoes-tarefa button {
+            margin-left: 10px;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            #authContainer, #crudContainer {
+                padding: 10px;
+                box-shadow: none;
+                border-radius: 0;
+            }
+
+            input[type="email"], input[type="password"], input[type="text"] {
+                font-size: 14px;
+                padding: 8px;
+            }
+
+            button {
+                font-size: 14px;
+                padding: 8px;
+            }
+
+            .tarefa {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .acoes-tarefa {
+                margin-top: 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            input[type="email"], input[type="password"], input[type="text"] {
+                font-size: 12px;
+                padding: 6px;
+            }
+
+            button {
+                font-size: 12px;
+                padding: 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Container de Autenticação -->
+    <div id="authContainer">
+        <h2>Autenticação</h2>
+        <form id="formLogin">
+            <input type="email" id="inputEmail" placeholder="Digite seu e-mail" required>
+            <input type="password" id="inputSenha" placeholder="Digite sua senha" required>
+            <button type="submit">Entrar</button>
+        </form>
+        <p>Não tem uma conta? <button id="botaoCadastro">Cadastre-se</button></p>
+    </div>
+
+    <!-- Container do CRUD de Tarefas -->
+    <div id="crudContainer" style="display:none;">
+        <form id="formTarefa">
+            <h2>Adicionar Tarefa</h2>
+            <input type="text" id="inputTarefa" placeholder="Digite uma tarefa" required>
+            <button type="submit">Adicionar Tarefa</button>
+        </form>
+
+        <div id="tarefas">
+            <h2>Tarefas</h2>
+            <div id="containerTarefas">
+                <!-- Tarefas serão exibidas aqui -->
+            </div>
+        </div>
+
+        <button id="botaoLogout">Sair</button>
+    </div>
+
+    <!-- Importando SDKs do Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+        // Configurações do Firebase
+        const configuracaoFirebase = {
+            apiKey: "AIzaSyCJIuMynzOSHF18EFCGrNYv67Y8W4TMEIY",
+            authDomain: "auth-7f9fb.firebaseapp.com",
+            projectId: "auth-7f9fb",
+            storageBucket: "auth-7f9fb.appspot.com",
+            messagingSenderId: "955108387686",
+            appId: "1:955108387686:web:f1f50d4c1570b9f40d36a7"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(configuracaoFirebase);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Função de autenticação de usuários
+        document.getElementById('formLogin').addEventListener('submit', async function(evento) {
+            evento.preventDefault();
+
+            const email = document.getElementById('inputEmail').value;
+            const senha = document.getElementById('inputSenha').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, senha);
+                alert('Login bem-sucedido!');
+            } catch (erro) {
+                console.error('Erro ao fazer login:', erro);
+                alert('Erro ao fazer login. Verifique suas credenciais.');
+            }
+        });
+
+        // Função de cadastro de novos usuários
+        document.getElementById('botaoCadastro').addEventListener('click', async function() {
+            const email = prompt('Digite seu e-mail:');
+            const senha = prompt('Digite sua senha:');
+            if (email && senha) {
+                try {
+                    await createUserWithEmailAndPassword(auth, email, senha);
+                    alert('Cadastro realizado com sucesso!');
+                } catch (erro) {
+                    console.error('Erro ao cadastrar usuário:', erro);
+                    alert('Erro ao cadastrar usuário. Erro: ' + erro.message);
+                }
+            }
+        });
+
+        // Função de logout
+        document.getElementById('botaoLogout').addEventListener('click', async function() {
+            try {
+                await signOut(auth);
+                alert('Logout realizado com sucesso!');
+            } catch (erro) {
+                console.error('Erro ao fazer logout:', erro);
+                alert('Erro ao fazer logout. Erro: ' + erro.message);
+            }
+        });
+
+        // Verificar mudanças no estado de autenticação
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('authContainer').style.display = 'none';
+                document.getElementById('crudContainer').style.display = 'block';
+                carregarTarefas(); // Carregar tarefas se o usuário estiver logado
+            } else {
+                document.getElementById('authContainer').style.display = 'block';
+                document.getElementById('crudContainer').style.display = 'none';
+            }
+        });
+
+        // Manipulador de envio de formulário de tarefas
+        document.getElementById('formTarefa').addEventListener('submit', async function(evento) {
+            evento.preventDefault();
+
+            const tarefa = document.getElementById('inputTarefa').value;
+            const usuario = auth.currentUser;
+
+            if (usuario) {
+                try {
+                    await addDoc(collection(db, 'tarefas'), {
+                        tarefa: tarefa,
+                        usuarioId: usuario.uid
+                    });
+                    alert('Tarefa adicionada com sucesso!');
+                    document.getElementById('formTarefa').reset();
+                    carregarTarefas(); // Carregar tarefas após envio
+                } catch (erro) {
+                    console.error('Erro ao adicionar tarefa:', erro);
+                    alert('Erro ao adicionar tarefa. Erro: ' + erro.message);
+                }
+            } else {
+                alert('Usuário não autenticado.');
+            }
+        });
+
+        // Função para carregar tarefas do Firestore
+        async function carregarTarefas() {
+            const containerTarefas = document.getElementById('containerTarefas');
+            containerTarefas.innerHTML = ''; // Limpa o conteúdo atual
+
+            const usuario = auth.currentUser;
+
+            if (usuario) {
+                try {
+                    const consulta = query(collection(db, 'tarefas'), where('usuarioId', '==', usuario.uid));
+                    const consultaSnapshot = await getDocs(consulta);
+                    consultaSnapshot.forEach((docSnapshot) => {
+                        const tarefa = docSnapshot.data().tarefa;
+                        const divTarefa = document.createElement('div');
+                        divTarefa.className = 'tarefa';
+                        divTarefa.innerHTML = `
+                            <div class="conteudo-tarefa">${tarefa}</div>
+                            <div class="acoes-tarefa">
+                                <button class="botao-editar">Editar</button>
+                                <button class="botao-excluir">Excluir</button>
+                            </div>
+                        `;
+
+                        // Função para excluir tarefa
+                        divTarefa.querySelector('.botao-excluir').addEventListener('click', async function() {
+                            try {
+                                const tarefaRef = doc(db, 'tarefas', docSnapshot.id);
+                                await deleteDoc(tarefaRef);
+                                alert('Tarefa excluída com sucesso!');
+                                carregarTarefas(); // Recarregar tarefas após exclusão
+                            } catch (erro) {
+                                console.error('Erro ao excluir a tarefa:', erro);
+                                alert('Erro ao excluir a tarefa. Erro: ' + erro.message);
+                            }
+                        });
+
+                        // Função para editar tarefa
+                        divTarefa.querySelector('.botao-editar').addEventListener('click', async function() {
+                            const novaTarefa = prompt('Editar tarefa:', tarefa);
+                            if (novaTarefa) {
+                                try {
+                                    const tarefaRef = doc(db, 'tarefas', docSnapshot.id);
+                                    await updateDoc(tarefaRef, {
+                                        tarefa: novaTarefa
+                                    });
+                                    alert('Tarefa atualizada com sucesso!');
+                                    carregarTarefas(); // Recarregar tarefas após atualização
+                                } catch (erro) {
+                                    console.error('Erro ao atualizar a tarefa:', erro);
+                                    alert('Erro ao atualizar a tarefa. Erro: ' + erro.message);
+                                }
+                            }
+                        });
+
+                        containerTarefas.appendChild(divTarefa);
+                    });
+                } catch (erro) {
+                    console.error('Erro ao carregar tarefas:', erro);
+                    alert('Erro ao carregar tarefas. Erro: ' + erro.message);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
